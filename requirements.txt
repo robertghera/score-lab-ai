@@ -1,0 +1,12 @@
+tensorflow
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+jupyter
+xgboost
+joblib
+catboost
+keras-tuner
+pymongo
