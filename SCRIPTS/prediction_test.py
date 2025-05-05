@@ -6,7 +6,8 @@ import joblib
 from tensorflow.keras.models import load_model
 import numpy as np
 
-mongoClient = MongoClient("mongodb+srv://u:p@cluster.ywrlr.mongodb.net/score-lab?retryWrites=true&w=majority&appName=Cluster")
+MODEL_NAME = "test"
+
 collectionPredictions = mongoClient["score-lab"]["predictions"]
 mongoClientLocal = MongoClient("mongodb+srv://u:p@cluster.ywrlr.mongodb.net/score-lab?retryWrites=true&w=majority&appName=Cluster")
 collectionPredictionsResult = mongoClientLocal["score-lab"]["predictions-test"]
@@ -44,6 +45,17 @@ TEAM_MAPPINGS = {
     "West Ham": "West Ham United",
     "Ipswich": "Ipswich Town",
     "Tottenham": "Tottenham Hotspur",
+    "Almere City FC": "Almere City",
+    "Waalwijk": "RKC Waalwijk",
+    "Heracles": "Heracles Almelo",
+    "GO Ahead Eagles": "Go Ahead Eagles",
+    "PEC Zwolle": "Zwolle",
+    "SC Braga": "Braga",
+    "GIL Vicente": "Gil Vicente FC",
+    "AVS": "AVS Futebol",
+    "Famalicao": "Famalicão",
+    "FC Porto": "Porto",
+    "Guimaraes": "Vitória Guimarães"
 };
 
 feature_columns = ['goals_for_home', 'goals_against_home',
@@ -84,10 +96,11 @@ def notGameType(gameType):
 model = load_model("D:\Repos\Personal\score-lab-ai\checkpoints\\best_model_24.keras")
 scaler = joblib.load("D:\Repos\Personal\score-lab-ai\checkpoints\saved_scaler.pkl")
 
-TIMESTAMP_LIMIT = 30 * 24 * 60 * 60 * 1000 # 40 days
+TIMESTAMP_LIMIT = 40 * 24 * 60 * 60 * 1000 # 40 days
 step = 0
-# {"$nin": [94, 88, 2, 3]}
-predictions = collectionPredictions.find({"league.id": {"$nin": [94, 88, 2, 3]}, "date": {"$lt": "2025-03-20"} }).to_list() # The query should be something related to current date/ season etc. This is a first itteration for now every time
+
+predictions = collectionPredictions.find({"league.id": {"$nin": [2,3]} }).to_list() # The query should be something related to current date/ season etc. This is a first itteration for now every time
+print("Total predictions to make: ", len(predictions))
 for prediction in predictions:
     fixture = prediction["fixture"]
     timestamp = int(time.mktime(datetime.datetime.strptime(prediction["date"],
@@ -124,38 +137,42 @@ for prediction in predictions:
     draws = 0
     losses = 0
     for game in home_team:
-        game_type = "_home"
-        if game["home_team"] != home_team_query:
-            game_type = "_away"
+        try:
+            game_type = "_home"
+            if game["home_team"] != home_team_query:
+                game_type = "_away"
 
-        if game["stats"]["score" + game_type] > game["stats"]["score" + notGameType(game_type)]:
-            wins += 1
-        elif game["stats"]["score" + game_type] == game["stats"]["score" + notGameType(game_type)]:
-            draws += 1
-        else:
-            losses += 1
-        
-        if home_team_stats.get("goals_for" + "_home", None) == None:
-            home_team_stats["goals_for" + "_home"] = 0
-        if home_team_stats.get("goals_against" + "_home", None) == None:
-            home_team_stats["goals_against" + "_home"] = 0
-
-        home_team_stats["goals_for" + "_home"] += game["stats"]["score" + game_type]
-        home_team_stats["goals_against" + "_home"] += game["stats"]["score" + notGameType(game_type)]
-
-        for feature in stats_to_consider:
-            currentFeature = feature + game_type
-            if home_team_stats.get(feature + "_home", None) != None:
-                home_team_stats[feature + "_home"] += game["stats"].get(currentFeature)
+            if game["stats"]["score" + game_type] > game["stats"]["score" + notGameType(game_type)]:
+                wins += 1
+            elif game["stats"]["score" + game_type] == game["stats"]["score" + notGameType(game_type)]:
+                draws += 1
             else:
-                home_team_stats[feature + "_home"] = game["stats"].get(currentFeature)
+                losses += 1
             
-        for feature in stats_to_consider_against:
-            currentFeature = feature + notGameType(game_type)
-            if home_team_stats.get(feature + "_against_home", None) != None:
-                home_team_stats[feature + "_against_home"] += game["stats"].get(currentFeature)
-            else:
-                home_team_stats[feature + "_against_home"] = game["stats"].get(currentFeature)
+            if home_team_stats.get("goals_for" + "_home", None) == None:
+                home_team_stats["goals_for" + "_home"] = 0
+            if home_team_stats.get("goals_against" + "_home", None) == None:
+                home_team_stats["goals_against" + "_home"] = 0
+
+            home_team_stats["goals_for" + "_home"] += game["stats"]["score" + game_type]
+            home_team_stats["goals_against" + "_home"] += game["stats"]["score" + notGameType(game_type)]
+
+            for feature in stats_to_consider:
+                currentFeature = feature + game_type
+                if home_team_stats.get(feature + "_home", None) != None:
+                    home_team_stats[feature + "_home"] += game["stats"].get(currentFeature)
+                else:
+                    home_team_stats[feature + "_home"] = game["stats"].get(currentFeature)
+                
+            for feature in stats_to_consider_against:
+                currentFeature = feature + notGameType(game_type)
+                if home_team_stats.get(feature + "_against_home", None) != None:
+                    home_team_stats[feature + "_against_home"] += game["stats"].get(currentFeature)
+                else:
+                    home_team_stats[feature + "_against_home"] = game["stats"].get(currentFeature)
+        except Exception as e:
+            print(game)
+
     home_team_stats["past_games_wins_home"] = wins
     home_team_stats["past_games_draws_home"] = draws
     home_team_stats["past_games_losses_home"] = losses
@@ -165,38 +182,41 @@ for prediction in predictions:
     draws = 0
     losses = 0
     for game in away_team:
-        game_type = "_home"
-        if game["home_team"] != away_team_query:
-            game_type = "_away"
+        try:
+            game_type = "_home"
+            if game["home_team"] != away_team_query:
+                game_type = "_away"
 
-        if game["stats"]["score" + game_type] > game["stats"]["score" + notGameType(game_type)]:
-            wins += 1
-        elif game["stats"]["score" + game_type] == game["stats"]["score" + notGameType(game_type)]:
-            draws += 1
-        else:
-            losses += 1
-        
-        if away_team_stats.get("goals_for" + "_away", None) == None:
-            away_team_stats["goals_for" + "_away"] = 0
-        if away_team_stats.get("goals_against" + "_away", None) == None:
-            away_team_stats["goals_against" + "_away"] = 0
-
-        away_team_stats["goals_for" + "_away"] += game["stats"]["score" + game_type]
-        away_team_stats["goals_against" + "_away"] += game["stats"]["score" + notGameType(game_type)]
-
-        for feature in stats_to_consider:
-            currentFeature = feature + game_type
-            if away_team_stats.get(feature + "_away", None) != None:
-                away_team_stats[feature + "_away"] += game["stats"].get(currentFeature)
+            if game["stats"]["score" + game_type] > game["stats"]["score" + notGameType(game_type)]:
+                wins += 1
+            elif game["stats"]["score" + game_type] == game["stats"]["score" + notGameType(game_type)]:
+                draws += 1
             else:
-                away_team_stats[feature + "_away"] = game["stats"].get(currentFeature)
+                losses += 1
             
-        for feature in stats_to_consider_against:
-            currentFeature = feature + notGameType(game_type)
-            if away_team_stats.get(feature + "_against_away", None) != None:
-                away_team_stats[feature + "_against_away"] += game["stats"].get(currentFeature)
-            else:
-                away_team_stats[feature + "_against_away"] = game["stats"].get(currentFeature)
+            if away_team_stats.get("goals_for" + "_away", None) == None:
+                away_team_stats["goals_for" + "_away"] = 0
+            if away_team_stats.get("goals_against" + "_away", None) == None:
+                away_team_stats["goals_against" + "_away"] = 0
+
+            away_team_stats["goals_for" + "_away"] += game["stats"]["score" + game_type]
+            away_team_stats["goals_against" + "_away"] += game["stats"]["score" + notGameType(game_type)]
+
+            for feature in stats_to_consider:
+                currentFeature = feature + game_type
+                if away_team_stats.get(feature + "_away", None) != None:
+                    away_team_stats[feature + "_away"] += game["stats"].get(currentFeature)
+                else:
+                    away_team_stats[feature + "_away"] = game["stats"].get(currentFeature)
+                
+            for feature in stats_to_consider_against:
+                currentFeature = feature + notGameType(game_type)
+                if away_team_stats.get(feature + "_against_away", None) != None:
+                    away_team_stats[feature + "_against_away"] += game["stats"].get(currentFeature)
+                else:
+                    away_team_stats[feature + "_against_away"] = game["stats"].get(currentFeature)
+        except Exception as e:
+            print(game)
     
     away_team_stats["past_games_wins_away"] = wins
     away_team_stats["past_games_draws_away"] = draws
@@ -225,12 +245,13 @@ for prediction in predictions:
     
     current_game = collectionData.find_one({"home_team": home_team_query, "away_team": away_team_query, "season": "2024-2025"})
 
-    if current_game == None:
+    if current_game == None: # TODO: This is big problem
         print(home_team_query, away_team_query)
         print(prediction.get("fixture").get("id"))
         continue
     if current_game.get("odds", None) == None:
         print(home_team_query, away_team_query)
+        print(prediction.get("fixture").get("id"))
 
     result = current_game["stats"]["score_home"] - current_game["stats"]["score_away"]
     if result > 0:
@@ -271,22 +292,24 @@ for prediction in predictions:
     #         "result": result
     #     })
 
+    model_name = MODEL_NAME
+
     if final_prediction == None:
         collectionPredictionsResult.update_one({"fixture.id": prediction.get("fixture").get("id")}, {
             "$set": {
-                "prediction": np.array(prediction_array[0], dtype=float).tolist(),
-                "prediction_given": prediction_value,
-                "odds": current_game["odds"],
+               f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
+                f'prediction_given.{model_name}': prediction_value,
+                "odds": current_game.get("odds", None),
                 "result": result
             }
         })
     else:
         collectionPredictionsResult.update_one({"fixture.id": prediction.get("fixture").get("id")},{
             "$set": {
-                "prediction": np.array(prediction_array[0], dtype=float).tolist(),
-                "final_prediction": final_prediction,
-                "prediction_given": prediction_value,
-                "odds": current_game["odds"],
+                f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
+                f'prediction_given.{model_name}': prediction_value,
+                f"final_prediction.{model_name}": final_prediction,
+                "odds": current_game.get("odds", None),
                 "result": result
             }
         })

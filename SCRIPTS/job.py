@@ -15,7 +15,7 @@ if len(dataMongo) == 0:
         2, # UCL, just because I CAN
 	    3, # UEL, :)
         39, # EPL
-        61, # Ligue 1
+        61, # Ligue 1   
         78, # Bundesliga
         88, # Eredivisie
         94, # Primeira Liga
@@ -35,6 +35,7 @@ if len(dataMongo) == 0:
                 "teams": fixture["teams"],
             }
             collectionPredictions.insert_one(prediction)
+            collectionPredictionsTesting.insert_one(prediction)
     
     for fixture in dbData:
         stats = requests.get("https://v3.football.api-sports.io/fixtures?id=" + str(fixture["fixture"]["id"]), headers={"x-rapidapi-key": "k"}).json()
@@ -50,6 +51,7 @@ if len(dataMongo) == 0:
                 "players": stats["response"][0]["players"],
                 "hasStats": True
             }})
+            collectionPredictionsTesting.update_one({"_id": fixture["_id"]}, {"$set": {
         time.sleep(6.9) # API rate limit
 else:
     print(json.dumps(dataMongo, indent=3))
