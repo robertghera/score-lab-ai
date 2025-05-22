@@ -6,6 +6,7 @@ from pymongo import MongoClient
 
 mongoClient = MongoClient("mongodb+srv://u:p@cluster.ywrlr.mongodb.net/score-lab?retryWrites=true&w=majority&appName=Cluster")
 collectionPredictions = mongoClient["score-lab"]["predictions"]
+collectionPredictionsTesting = mongoClient["score-lab"]["predictions-testing"]
 
 date = datetime.datetime.now().strftime("%Y-%m-%d")
 dataMongo = collectionPredictions.find({date: date}).to_list()
@@ -52,6 +53,14 @@ if len(dataMongo) == 0:
                 "hasStats": True
             }})
             collectionPredictionsTesting.update_one({"_id": fixture["_id"]}, {"$set": {
+                "goals": stats["response"][0]["goals"],
+                "score": stats["response"][0]["score"],
+                "events": stats["response"][0]["events"],
+                "lineups": stats["response"][0]["lineups"],
+                "statistics": stats["response"][0]["statistics"],
+                "players": stats["response"][0]["players"],
+                "hasStats": True
+            }})
         time.sleep(6.9) # API rate limit
 else:
     print(json.dumps(dataMongo, indent=3))

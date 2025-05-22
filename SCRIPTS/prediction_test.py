@@ -41,6 +41,8 @@ TEAM_MAPPINGS = {
     "Stade Brestois 29": "Brest",
     "Paris Saint Germain": "Paris Saint-Germain",
     "Leicester": "Leicester City",
+    "Newcastle": "Newcastle United",
+    "Brighton": "Brighton & Hove Albion",
     "Wolves": "Wolverhampton Wanderers",
     "West Ham": "West Ham United",
     "Ipswich": "Ipswich Town",
@@ -99,7 +101,7 @@ scaler = joblib.load("D:\Repos\Personal\score-lab-ai\checkpoints\saved_scaler.pk
 TIMESTAMP_LIMIT = 40 * 24 * 60 * 60 * 1000 # 40 days
 step = 0
 
-predictions = collectionPredictions.find({"league.id": {"$nin": [2,3]} }).to_list() # The query should be something related to current date/ season etc. This is a first itteration for now every time
+predictions = collectionPredictions.find({"league.id": {"$nin": [2,3]} }).sort({"date": -1}).to_list() # The query should be something related to current date/ season etc. This is a first itteration for now every time
 print("Total predictions to make: ", len(predictions))
 for prediction in predictions:
     fixture = prediction["fixture"]
@@ -117,6 +119,9 @@ for prediction in predictions:
     away_team = collectionData.find({"$or": [{"home_team": away_team_query}, {"away_team": away_team_query}], "date": { "$lt": timestamp, "$gt": timestamp - TIMESTAMP_LIMIT}}).sort("date", -1).limit(4).to_list()
 
     if len(home_team) < 4 or len(away_team) < 4:
+        print("Not enough data for ", home_team_query, away_team_query)
+        if (len(home_team) == 0 or len(away_team) == 0):
+            print("CAUTION!!! Home team: ", len(home_team), " Away team: ", len(away_team))
         continue
 
     stats_to_consider = [
@@ -248,18 +253,21 @@ for prediction in predictions:
     if current_game == None: # TODO: This is big problem
         print(home_team_query, away_team_query)
         print(prediction.get("fixture").get("id"))
-        continue
-    if current_game.get("odds", None) == None:
-        print(home_team_query, away_team_query)
-        print(prediction.get("fixture").get("id"))
+        # continue
 
-    result = current_game["stats"]["score_home"] - current_game["stats"]["score_away"]
-    if result > 0:
-        result = "W"
-    elif result < 0:
-        result = "L"
-    else:
-        result = "D"
+    result = None
+    if current_game is not None:
+        if current_game.get("odds", None) == None:
+            print(home_team_query, away_team_query)
+            print(prediction.get("fixture").get("id"))
+
+        result = current_game["stats"]["score_home"] - current_game["stats"]["score_away"]
+        if result > 0:
+            result = "W"
+        elif result < 0:
+            result = "L"
+        else:
+            result = "D"
     
     if prediction_value == 0:
         prediction_value = "L"
@@ -268,37 +276,31 @@ for prediction in predictions:
     else:
         prediction_value = "W"
 
-    # if final_prediction == None:
-    #     collectionPredictionsResult.insert_one({
-    #         "prediction": np.array(prediction_array[0], dtype=float).tolist(),
-    #         "fixture": fixture,
-    #         "date": prediction["date"],
-    #         "league": prediction["league"],
-    #         "teams": prediction["teams"],
-    #         "prediciton": prediction_value,
-    #         "odds": current_game["odds"],
-    #         "result": result
-    #     })
-    # else:
-    #     collectionPredictionsResult.insert_one({
-    #         "prediction": np.array(prediction_array[0], dtype=float).tolist(),
-    #         "fixture": fixture,
-    #         "date": prediction["date"],
-    #         "league": prediction["league"],
-    #         "teams": prediction["teams"],
-    #         "final_prediction": final_prediction,
-    #         "prediciton": prediction_value,
-    #         "odds": current_game["odds"],
-    #         "result": result
-    #     })
-
     model_name = MODEL_NAME
-
-    if final_prediction == None:
+    
+    # TODO REFACTOR THIS
+    if final_prediction == None and current_game is not None:
         collectionPredictionsResult.update_one({"fixture.id": prediction.get("fixture").get("id")}, {
             "$set": {
                f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
                 f'prediction_given.{model_name}': prediction_value,
+                "odds": current_game.get("odds", None),
+                "result": result
+            }
+        })
+    elif final_prediction == None:
+        collectionPredictionsResult.update_one({"fixture.id": prediction.get("fixture").get("id")}, {
+            "$set": {
+               f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
+                f'prediction_given.{model_name}': prediction_value,
+            }
+        })
+    elif final_prediction != None and current_game is not None:
+        collectionPredictionsResult.update_one({"fixture.id": prediction.get("fixture").get("id")},{
+            "$set": {
+                f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
+                f'prediction_given.{model_name}': prediction_value,
+                f"final_prediction.{model_name}": final_prediction,
                 "odds": current_game.get("odds", None),
                 "result": result
             }
@@ -309,8 +311,6 @@ for prediction in predictions:
                 f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
                 f'prediction_given.{model_name}': prediction_value,
                 f"final_prediction.{model_name}": final_prediction,
-                "odds": current_game.get("odds", None),
-                "result": result
             }
         })
     

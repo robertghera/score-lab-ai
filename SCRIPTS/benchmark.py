@@ -19,20 +19,20 @@ odds_name = {
 odds = {}
 
 for prediction in predictions:
-    if prediction.get("final_prediction", None) is not None:
-        if total.get(prediction["final_prediction"], None) is None:
-            total[prediction["final_prediction"]] = 1
+    if prediction.get("final_prediction", {}).get("test", None) is not None:
+        if total.get(prediction["final_prediction"]["test"], None) is None:
+            total[prediction["final_prediction"]["test"]] = 1
         else:
-            total[prediction["final_prediction"]] += 1
-        if prediction["final_prediction"] == prediction["result"]:
-            if corect.get(prediction["final_prediction"], None) is None:
-                corect[prediction["final_prediction"]] = 1
+            total[prediction["final_prediction"]["test"]] += 1
+        if prediction["final_prediction"]["test"] == prediction["result"]:
+            if corect.get(prediction["final_prediction"]["test"], None) is None:
+                corect[prediction["final_prediction"]["test"]] = 1
             else:
-                corect[prediction["final_prediction"]] += 1
-            if odds.get(prediction["final_prediction"], None) is None:
-                odds[prediction["final_prediction"]] = prediction["odds"][odds_name[prediction["final_prediction"]]]
+                corect[prediction["final_prediction"]["test"]] += 1
+            if odds.get(prediction["final_prediction"]["test"], None) is None:
+                odds[prediction["final_prediction"]["test"]] = prediction["odds"][odds_name[prediction["final_prediction"]["test"]]]
             else:
-                odds[prediction["final_prediction"]] += prediction["odds"][odds_name[prediction["final_prediction"]]]
+                odds[prediction["final_prediction"]["test"]] += prediction["odds"][odds_name[prediction["final_prediction"]["test"]]]
 
 for key in total.keys():
     print(f"Total: {key} - {total[key]}")
