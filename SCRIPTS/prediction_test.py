@@ -1,18 +1,38 @@
+import os
+import logging
+import warnings
+
+# Suppress all warnings
+warnings.filterwarnings('ignore')
+
+# TensorFlow specific
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # 0=all, 1=info, 2=warning, 3=error
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
+
+# Suppress specific warnings
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*escape sequence.*')
+
+from tensorflow.keras.models import load_model
+import joblib
 from pymongo import MongoClient
 import time
 import datetime
 import pandas as pd
-import joblib
-from tensorflow.keras.models import load_model
 import numpy as np
+import os
+
+database_username = os.environ.get('DATABASE_USERNAME')
+database_password = os.environ.get('DATABASE_PASSWORD')
 
 MODEL_NAME = "test"
 
+mongoClient = MongoClient(f"mongodb+srv://{database_username}:{database_password}@cluster.ywrlr.mongodb.net/score-lab?retryWrites=true&w=majority&appName=Cluster", connectTimeoutMS=30000)
 collectionPredictions = mongoClient["score-lab"]["predictions"]
-mongoClientLocal = MongoClient("mongodb+srv://u:p@cluster.ywrlr.mongodb.net/score-lab?retryWrites=true&w=majority&appName=Cluster")
-collectionPredictionsResult = mongoClientLocal["score-lab"]["predictions-test"]
-mongoClientLocal = MongoClient("mongodb://localhost:27017/")
-collectionData = mongoClientLocal["sports-miner"]["fbref"]
+collectionPredictionsResult = mongoClient["score-lab"]["predictions-testing-18"]
+collectionData = mongoClient["sports-miner"]["fbref"]
 
 TEAM_MAPPINGS = {
     "Borussia Dortmund": "Dortmund",
@@ -95,13 +115,15 @@ def notGameType(gameType):
         return "_away"
     return "_home"
 
-model = load_model("D:\Repos\Personal\score-lab-ai\checkpoints\\best_model_24.keras")
-scaler = joblib.load("D:\Repos\Personal\score-lab-ai\checkpoints\saved_scaler.pkl")
+model = load_model("checkpoints/model_nr_18_clasic.keras")
+scaler = joblib.load("checkpoints/saved_scaler_model_nr_18_clasic.pkl")
 
-TIMESTAMP_LIMIT = 40 * 24 * 60 * 60 * 1000 # 40 days
+TIMESTAMP_LIMIT = 100 * 24 * 60 * 60 * 1000 # 40 days
 step = 0
 
-predictions = collectionPredictions.find({"league.id": {"$nin": [2,3]} }).sort({"date": -1}).to_list() # The query should be something related to current date/ season etc. This is a first itteration for now every time
+print("STARTING PREDICTION PROCESS...")
+
+predictions = collectionPredictionsResult.find({"league.id": {"$nin": [2,3]}, "madePrediction": {"$exists": False} }).sort({"date": 1}).to_list() # The query should be something related to current date/ season etc. This is a first itteration for now every time
 print("Total predictions to make: ", len(predictions))
 for prediction in predictions:
     fixture = prediction["fixture"]
@@ -119,7 +141,7 @@ for prediction in predictions:
     away_team = collectionData.find({"$or": [{"home_team": away_team_query}, {"away_team": away_team_query}], "date": { "$lt": timestamp, "$gt": timestamp - TIMESTAMP_LIMIT}}).sort("date", -1).limit(4).to_list()
 
     if len(home_team) < 4 or len(away_team) < 4:
-        print("Not enough data for ", home_team_query, away_team_query)
+        print("Not enough data for:", home_team_query, " - ", away_team_query)
         if (len(home_team) == 0 or len(away_team) == 0):
             print("CAUTION!!! Home team: ", len(home_team), " Away team: ", len(away_team))
         continue
@@ -241,11 +263,11 @@ for prediction in predictions:
     prediction_array = model.predict(scaler.transform(df[feature_columns]), verbose=0)
     prediction_value = int(np.argmax(prediction_array[0]))
     final_prediction = None
-    if prediction_value == 0 and prediction_array[0][0] > 0.55:
+    if prediction_value == 0 and prediction_array[0][0] > 0.45:
         final_prediction = "L"
-    elif prediction_value == 1 and prediction_array[0][1] > 0.38:
+    elif prediction_value == 1 and prediction_array[0][1] > 0.37:
         final_prediction = "D"
-    elif prediction_value == 2 and prediction_array[0][2] > 0.55:
+    elif prediction_value == 2 and prediction_array[0][2] > 0.47:
         final_prediction = "W"
     
     current_game = collectionData.find_one({"home_team": home_team_query, "away_team": away_team_query, "season": "2024-2025"})
@@ -285,7 +307,8 @@ for prediction in predictions:
                f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
                 f'prediction_given.{model_name}': prediction_value,
                 "odds": current_game.get("odds", None),
-                "result": result
+                "result": result,
+                "madePrediction": True,
             }
         })
     elif final_prediction == None:
@@ -293,6 +316,7 @@ for prediction in predictions:
             "$set": {
                f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
                 f'prediction_given.{model_name}': prediction_value,
+                "madePrediction": True,
             }
         })
     elif final_prediction != None and current_game is not None:
@@ -302,7 +326,8 @@ for prediction in predictions:
                 f'prediction_given.{model_name}': prediction_value,
                 f"final_prediction.{model_name}": final_prediction,
                 "odds": current_game.get("odds", None),
-                "result": result
+                "result": result,
+                "madePrediction": True,
             }
         })
     else:
@@ -311,10 +336,12 @@ for prediction in predictions:
                 f'prediction.{model_name}': np.array(prediction_array[0], dtype=float).tolist(),
                 f'prediction_given.{model_name}': prediction_value,
                 f"final_prediction.{model_name}": final_prediction,
+                "madePrediction": True,
             }
         })
     
     step += 1
-    if step % 25 == 0:
-        print("Step: ", step)
+    if step % 5 == 0:
+        print("Total percentage of prediction made: ", str(step/len(predictions) * 100) + "%")
+
     

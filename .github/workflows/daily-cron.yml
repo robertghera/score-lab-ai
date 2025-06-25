@@ -1,0 +1,31 @@
+name: Daily Cron Job
+
+on:
+  schedule:
+    - cron: '20 16 * * *'  # 6 AM UTC daily
+  workflow_dispatch:  # Allows manual trigger for testing
+
+jobs:
+  run-cron:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements-script.txt ]; then pip install -r requirements-script.txt; fi
+        
+    - name: Run cron job
+      run: python SCRIPTS/cron_job.py
+      env:
+        API_KEY: ${{ secrets.API_KEY }}
+        DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+        DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
