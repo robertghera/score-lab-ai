@@ -58,8 +58,6 @@ if len(dataMongo) == 0:
 
     for fixture in dbData:
         stats = requests.get("https://v3.football.api-sports.io/fixtures?id=" + str(fixture["fixture"]["id"]), headers={"x-rapidapi-key": f"{api_key}"}).json()
-        print(fixture["fixture"]["id"])
-        print(stats["response"][0]["fixture"]["id"])
         if stats["response"]:
             collectionPredictions.update_one({"_id": fixture["_id"]}, {"$set": {
                 "goals": stats["response"][0]["goals"],
@@ -88,6 +86,7 @@ if len(dataMongo) == 0:
                 "players": stats["response"][0]["players"],
                 "hasStats": True
             }})
+        print("Updated fixture id:" + str(stats["response"][0]["fixture"]["id"]))
         time.sleep(6.9) # API rate limit
 else:
     print(json.dumps(dataMongo, indent=3))

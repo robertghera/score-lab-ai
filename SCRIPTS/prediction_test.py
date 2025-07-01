@@ -275,13 +275,14 @@ for prediction in predictions:
     if current_game == None: # TODO: This is big problem
         print(home_team_query, away_team_query)
         print(prediction.get("fixture").get("id"))
-        # continue
+        continue
 
     result = None
     if current_game is not None:
         if current_game.get("odds", None) == None:
             print(home_team_query, away_team_query)
             print(prediction.get("fixture").get("id"))
+            continue
 
         result = current_game["stats"]["score_home"] - current_game["stats"]["score_away"]
         if result > 0:
@@ -341,7 +342,7 @@ for prediction in predictions:
         })
     
     step += 1
-    if step % 5 == 0:
+    if step % 10 == 0:
         print("Total percentage of prediction made: ", str(step/len(predictions) * 100) + "%")
 
     
